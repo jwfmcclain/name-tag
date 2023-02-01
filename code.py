@@ -4,6 +4,37 @@ import digitalio
 import neopixel
 import statemachines
 
+COLOR_CYCLE_STEP_MAX = 44
+COLOR_CYCLE_STEP_DIV = 4
+
+def color_cycle_color_limiter(*color):
+    max_multiplier = COLOR_CYCLE_STEP_MAX / COLOR_CYCLE_STEP_DIV
+    max_component = max(color)
+    if max_component * max_multiplier < 256:
+        return color
+
+    scale_factor = (255 / ( max_component *  max_multiplier))
+    assert scale_factor * max_component *  max_multiplier < 256, color
+
+    return tuple((c * scale_factor for c in color))
+
+def color_cycle_pallet_limiter(*pallet):
+    return tuple((color_cycle_color_limiter(*color) for color in pallet))
+
+def number_color_to_tuple(hex_color):
+    return (hex_color >> 16 & 0xFF, hex_color >> 8 & 0xFF,hex_color & 0xFF)
+
+def number_palet_to_tuple(*pallet):
+    return tuple((number_color_to_tuple(color) for color in pallet))
+
+UKRAINE_YELLOW = (255, 0xD5, 0)
+SAPPHIRE = (00, 0x5B, 0xBB)
+UKRAINE_PALLET = color_cycle_pallet_limiter(UKRAINE_YELLOW, SAPPHIRE)
+
+XMASS_PALLET = color_cycle_pallet_limiter((42, 255, 0), (255, 0, 0))
+HANUKKAH_PALLET = color_cycle_pallet_limiter((0, 0, 255), (64, 64, 64))
+PRIDE_PALLET = color_cycle_pallet_limiter(*number_palet_to_tuple(0xE40303, 0xFF4000, 0xFFED00, 0x008026, 0x24408E, 0x732982))
+
 class Controller:
     def __init__(self, button_watcher):
         self.button_watcher = button_watcher
@@ -20,40 +51,44 @@ class Controller:
 
     def colors(self):
         return self.color_list
-    
+
     def start(self, now):
         return self.flickering, statemachines.IMMEDATE_TRANSFER
 
     def pride(self, now):
-        self.color_list = (
-            (4.659090909090909, 2.3181818181818183, 5.795454545454546),
-            (5.795454545454546, 2.2954545454545454, 3.477272727272727),
-            (5.795454545454546, 0.0, 0.0),
-            (5.795454545454546, 3.227272727272727, 0.0),
-            (5.795454545454546, 5.795454545454546, 0.0),
-            (0.0, 3.227272727272727, 0.0),
-            (0.0, 4.363636363636363, 4.363636363636363),
-            (1.4545454545454546, 0.0, 3.4545454545454546),
-            (3.227272727272727, 0.0, 3.227272727272727))
-        
+        print("pride")
+        self.color_list = PRIDE_PALLET
+
         if self.button_was_pressed():
             self.color_list = None
-            return self.flickering, statemachines.IMMEDATE_TRANSFER
+            return self.ukraine, statemachines.IMMEDATE_TRANSFER
 
         return None, self.button_watcher
-    
+
     def hanukkah(self, now):
-        self.color_list = ((0, 0, 12), (4,  4, 4))
-        
+        print("hanukkah")
+        self.color_list = HANUKKAH_PALLET
+
         if self.button_was_pressed():
             self.color_list = None
             return self.pride, statemachines.IMMEDATE_TRANSFER
 
         return None, self.button_watcher
-    
+
+    def ukraine(self, now):
+        print("ukraine")
+        self.color_list = UKRAINE_PALLET
+
+        if self.button_was_pressed():
+            self.color_list = None
+            return self.flickering, statemachines.IMMEDATE_TRANSFER
+
+        return None, self.button_watcher
+
     def xmass(self, now):
-        self.color_list = (( 2, 12, 0), (12,  0, 0))
-        
+        print("christmas")
+        self.color_list = XMASS_PALLET
+
         if self.button_was_pressed():
             self.color_list = None
             return self.hanukkah, statemachines.IMMEDATE_TRANSFER
@@ -61,8 +96,9 @@ class Controller:
         return None, self.button_watcher
 
     def flickering(self, now):
+        print("flame")
         self.candle = True
-        
+
         if self.button_was_pressed():
             self.candle = False
             return self.xmass, statemachines.IMMEDATE_TRANSFER
@@ -87,7 +123,6 @@ class OurFlicker(statemachines.NeoPixelFlicker):
 
         return self.controller
 
-
 class ColorCycle:
     def __init__(self, pixels, pulser, controller):
         self.pixels = pixels
@@ -97,11 +132,13 @@ class ColorCycle:
 
     def start(self, now):
         if self.controller.colors():
+            print(f"color cycle over: {self.controller.colors()}")
             return self.new_cycle, statemachines.IMMEDATE_TRANSFER
         return self.idle, self.controller
 
     def idle(self, now):
         if self.controller.colors():
+            print(f"color cycle over: {self.controller.colors()}")
             return self.new_cycle, statemachines.IMMEDATE_TRANSFER
         return None, self.controller
 
@@ -109,15 +146,19 @@ class ColorCycle:
         self.color_list = self.controller.colors()
         self.color_index = 0
         self.step = 1
+
         return self.up, statemachines.IMMEDATE_TRANSFER
+
+    def load_pixel(self):
+        self.pixels[0] = [ int(x*self.step/COLOR_CYCLE_STEP_DIV) for x in self.color_list[self.color_index] ]
 
     def up(self, now):
         if self.controller.colors() is not self.color_list:
             return self.idle, statemachines.IMMEDATE_TRANSFER
-        
-        self.pixels[0] = [ int(x*self.step/4) for x in self.color_list[self.color_index] ]
+
+        self.load_pixel()
         self.step += 1
-        if self.step >= 44:
+        if self.step >= COLOR_CYCLE_STEP_MAX:
             return self.down, statemachines.IMMEDATE_TRANSFER
         return None, self.pulser
 
@@ -125,7 +166,7 @@ class ColorCycle:
         if self.controller.colors() is not self.color_list:
             return self.idle, statemachines.IMMEDATE_TRANSFER
 
-        self.pixels[0] = [ int(x*self.step/4) for x in self.color_list[self.color_index] ]
+        self.load_pixel()
         self.step -= 1
         if self.step < 1:
             self.color_index += 1
@@ -133,7 +174,7 @@ class ColorCycle:
                 return self.new_cycle, statemachines.IMMEDATE_TRANSFER
             return self.up, statemachines.IMMEDATE_TRANSFER
         return None, self.pulser
-        
+
 # debuging aid
 blinker = statemachines.UnevenBlinker(board.LED, 0.5, 4.5)
 statemachines.register_machine(blinker)
@@ -160,4 +201,3 @@ cycler = ColorCycle(pixels, statemachines.Pulser(0.04), controller)
 statemachines.register_machine(cycler)
 
 statemachines.run((pixels.show,))
-
