@@ -4,6 +4,9 @@ import digitalio
 import neopixel
 import statemachines
 
+UKRAINE_YELLOW = tuple(int(x/6) for x in (255, 0xD5, 0))
+SAPPHIRE = tuple(int(x/6) for x in (00, 0x5B, 0xBB))
+
 class Controller:
     def __init__(self, button_watcher):
         self.button_watcher = button_watcher
@@ -20,7 +23,7 @@ class Controller:
 
     def colors(self):
         return self.color_list
-    
+
     def start(self, now):
         return self.flickering, statemachines.IMMEDATE_TRANSFER
 
@@ -35,25 +38,34 @@ class Controller:
             (0.0, 4.363636363636363, 4.363636363636363),
             (1.4545454545454546, 0.0, 3.4545454545454546),
             (3.227272727272727, 0.0, 3.227272727272727))
-        
+
         if self.button_was_pressed():
             self.color_list = None
-            return self.flickering, statemachines.IMMEDATE_TRANSFER
+            return self.ukraine, statemachines.IMMEDATE_TRANSFER
 
         return None, self.button_watcher
-    
+
     def hanukkah(self, now):
         self.color_list = ((0, 0, 12), (4,  4, 4))
-        
+
         if self.button_was_pressed():
             self.color_list = None
             return self.pride, statemachines.IMMEDATE_TRANSFER
 
         return None, self.button_watcher
-    
+
+    def ukraine(self, now):
+        self.color_list = (UKRAINE_YELLOW, SAPPHIRE)
+
+        if self.button_was_pressed():
+            self.color_list = None
+            return self.flickering, statemachines.IMMEDATE_TRANSFER
+
+        return None, self.button_watcher
+
     def xmass(self, now):
         self.color_list = (( 2, 12, 0), (12,  0, 0))
-        
+
         if self.button_was_pressed():
             self.color_list = None
             return self.hanukkah, statemachines.IMMEDATE_TRANSFER
@@ -62,7 +74,7 @@ class Controller:
 
     def flickering(self, now):
         self.candle = True
-        
+
         if self.button_was_pressed():
             self.candle = False
             return self.xmass, statemachines.IMMEDATE_TRANSFER
@@ -114,7 +126,7 @@ class ColorCycle:
     def up(self, now):
         if self.controller.colors() is not self.color_list:
             return self.idle, statemachines.IMMEDATE_TRANSFER
-        
+
         self.pixels[0] = [ int(x*self.step/4) for x in self.color_list[self.color_index] ]
         self.step += 1
         if self.step >= 44:
@@ -133,7 +145,7 @@ class ColorCycle:
                 return self.new_cycle, statemachines.IMMEDATE_TRANSFER
             return self.up, statemachines.IMMEDATE_TRANSFER
         return None, self.pulser
-        
+
 # debuging aid
 blinker = statemachines.UnevenBlinker(board.LED, 0.5, 4.5)
 statemachines.register_machine(blinker)
@@ -160,4 +172,3 @@ cycler = ColorCycle(pixels, statemachines.Pulser(0.04), controller)
 statemachines.register_machine(cycler)
 
 statemachines.run((pixels.show,))
-
